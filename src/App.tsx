@@ -111,7 +111,12 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<any>(() => {
     try {
       const saved = localStorage.getItem('currentUser');
-      return saved ? JSON.parse(saved) : null;
+      if (!saved) return null;
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed.role && parsed.name) {
+        return parsed;
+      }
+      return null;
     } catch {
       return null;
     }
@@ -120,8 +125,12 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<'customer' | 'retailer'>(() => {
     try {
       const saved = localStorage.getItem('currentUser');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return parsed ? parsed.role : 'customer';
+      if (!saved) return 'customer';
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed.role) {
+        return parsed.role;
+      }
+      return 'customer';
     } catch {
       return 'customer';
     }
@@ -130,8 +139,12 @@ export default function App() {
   const [activeCustomerId, setActiveCustomerId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('currentUser');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return parsed && parsed.role === 'customer' ? parsed.customerId : 'cust-1';
+      if (!saved) return 'cust-1';
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed.role === 'customer') {
+        return parsed.customerId || 'cust-1';
+      }
+      return 'cust-1';
     } catch {
       return 'cust-1';
     }
@@ -140,8 +153,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>(() => {
     try {
       const saved = localStorage.getItem('currentUser');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return parsed && parsed.role === 'retailer' ? 'dashboard' : 'home';
+      if (!saved) return 'home';
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object' && parsed.role === 'retailer') {
+        return 'dashboard';
+      }
+      return 'home';
     } catch {
       return 'home';
     }
