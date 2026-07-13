@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Droplet, ShoppingCart, User, Users, Calendar, Award, CheckCircle, 
   Clock, AlertTriangle, ShieldCheck, CreditCard, ChevronRight, Plus, 
   Minus, Trash2, Edit, TrendingUp, Package, Truck, ArrowRight, Sparkles, 
   MapPin, HelpCircle, RefreshCw, Layers, Check, Search, Filter, Phone, 
-  DollarSign, Map, X, Info, Download, FileText, Upload, Sliders, Play, Pause, ChevronLeft, LogIn, Lock, Smartphone, Settings
+  DollarSign, Map, X, Info, Download, FileText, Upload, Sliders, Play, Pause, ChevronLeft, LogIn, Lock, Smartphone, Settings, LogOut
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   BarChart, Bar, Legend, Cell, PieChart, Pie
 } from 'recharts';
+import AuthScreen from './components/AuthScreen';
 
 // App Types
 interface Product {
@@ -106,9 +108,45 @@ interface AIInsights {
 
 export default function App() {
   // Global App States
-  const [activeRole, setActiveRole] = useState<'customer' | 'retailer'>('customer');
-  const [activeCustomerId, setActiveCustomerId] = useState<string>('cust-1'); // SK Kausik
-  const [activeTab, setActiveTab] = useState<string>('home'); // 'home', 'products', 'orders', 'payments', 'profile', 'dashboard', 'customers', 'inventory'
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const [activeRole, setActiveRole] = useState<'customer' | 'retailer'>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed ? parsed.role : 'customer';
+    } catch {
+      return 'customer';
+    }
+  });
+
+  const [activeCustomerId, setActiveCustomerId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed && parsed.role === 'customer' ? parsed.customerId : 'cust-1';
+    } catch {
+      return 'cust-1';
+    }
+  });
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      const parsed = saved ? JSON.parse(saved) : null;
+      return parsed && parsed.role === 'retailer' ? 'dashboard' : 'home';
+    } catch {
+      return 'home';
+    }
+  });
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   // DB Sync States
@@ -162,6 +200,7 @@ export default function App() {
   });
   const [adminSearchTerm, setAdminSearchTerm] = useState('');
   const [adminCategoryFilter, setAdminCategoryFilter] = useState('All');
+  const [selectedDispatchStage, setSelectedDispatchStage] = useState<string>('Pending');
   
   // Delivery Partner UI Controls
   const [riderOnline, setRiderOnline] = useState(true);
@@ -352,16 +391,39 @@ export default function App() {
     }
   }, [activeCustomerId, customers]);
 
+  // Synchronize state when currentUser changes or activeTab is modified (Role-based page protection)
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+    // Enforce role-based tab restrictions
+    const customerTabs = ['home', 'products', 'orders', 'payments', 'profile', 'subscriptions', 'insights'];
+    const retailerTabs = ['dashboard', 'orders', 'customers', 'payments', 'inventory', 'profile'];
+
+    if (currentUser.role === 'customer') {
+      if (!customerTabs.includes(activeTab)) {
+        setActiveTab('home');
+      }
+    } else if (currentUser.role === 'retailer') {
+      if (!retailerTabs.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [currentUser, activeTab]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser');
+    setCurrentUser(null);
+    setActiveRole('customer');
+    setActiveCustomerId('cust-1');
+    setActiveTab('home');
+    setCart({});
+    showToast('Logged out successfully', 'success');
+  };
+
   // Role adjustment helpers
   const handleRoleChange = (role: 'customer' | 'retailer') => {
-    setActiveRole(role);
-    if (role === 'customer') {
-      setActiveCustomerId('cust-1'); // SK Kausik
-      setActiveTab('home');
-    } else if (role === 'retailer') {
-      setActiveTab('dashboard');
-    }
-    showToast(`Switched persona to: ${role.toUpperCase()}`, 'info');
+    console.log('Role change via simulator disabled');
   };
 
   // Cart Management
@@ -761,6 +823,51 @@ export default function App() {
   // Calculate current active customer stats
   const currentCustomer = customers.find(c => c.id === activeCustomerId);
 
+  if (!currentUser) {
+    return (
+      <div id="app-root" className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans transition-all">
+        {toast && (
+          <div 
+            id="global-toast" 
+            className="fixed top-6 right-6 z-50 max-w-sm w-full bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800/80 p-4 overflow-hidden animate-toast-in text-left flex gap-3.5 relative"
+          >
+            <div className={`p-2 rounded-xl self-start ${
+              toast.type === 'success' ? 'bg-emerald-500/15 text-emerald-400' :
+              toast.type === 'error' ? 'bg-rose-500/15 text-rose-400' :
+              'bg-blue-500/15 text-blue-400'
+            }`}>
+              {toast.type === 'success' && <CheckCircle className="w-5 h-5" />}
+              {toast.type === 'error' && <AlertTriangle className="w-5 h-5" />}
+              {toast.type === 'info' && <Sparkles className="w-5 h-5" />}
+            </div>
+            <div className="flex-grow pr-6 space-y-0.5 self-center">
+              <h5 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                {toast.type === 'success' ? 'Success' :
+                 toast.type === 'error' ? 'Attention' :
+                 'Alert'}
+              </h5>
+              <p className="text-xs font-semibold text-slate-200 leading-normal">{toast.message}</p>
+            </div>
+            <button 
+              onClick={() => setToast(null)}
+              className="absolute top-3.5 right-3.5 p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <AuthScreen onLoginSuccess={(user: any) => {
+          setCurrentUser(user);
+          localStorage.setItem('currentUser', JSON.stringify(user));
+          setActiveRole(user.role);
+          setActiveCustomerId(user.role === 'customer' ? user.customerId : 'cust-1');
+          setActiveTab(user.role === 'retailer' ? 'dashboard' : 'home');
+          showToast(`Welcome back, ${user.name}!`, 'success');
+        }} />
+      </div>
+    );
+  }
+
   return (
     <div id="app-root" className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans transition-all">
       
@@ -818,32 +925,29 @@ export default function App() {
             </div>
           </div>
 
-          {/* Persona Switcher Box (Extremely Useful for Previewing different flows) */}
-          <div className="bg-slate-100 rounded-xl p-1.5 flex items-center gap-1.5 self-center border border-slate-200/60 shadow-inner">
-            <span className="text-[11px] font-bold text-slate-500 uppercase px-2">Role Simulator</span>
+          {/* Logged-In User Status & Logout Button */}
+          <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/60 rounded-2xl px-3.5 py-1.5 self-center">
+            <div className="w-7.5 h-7.5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs uppercase shadow-sm">
+              {currentUser?.name ? currentUser.name.substring(0, 2) : 'AD'}
+            </div>
+            <div className="text-left">
+              <p className="text-xs font-black text-slate-800 leading-none mb-1">{currentUser?.name || 'User'}</p>
+              <span className={`text-[8px] tracking-wider font-extrabold uppercase px-1.5 py-0.5 rounded-md ${
+                currentUser?.role === 'retailer' 
+                  ? 'bg-amber-100 text-amber-700 border border-amber-200/60' 
+                  : 'bg-blue-100 text-blue-700 border border-blue-200/60'
+              }`}>
+                {currentUser?.role || 'Guest'}
+              </span>
+            </div>
+            <div className="h-6 w-px bg-slate-200/80 mx-1" />
             <button 
-              id="switch-customer"
-              onClick={() => handleRoleChange('customer')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                activeRole === 'customer' 
-                  ? 'bg-blue-600 text-white shadow-md' 
-                  : 'text-slate-600 hover:bg-slate-200'
-              }`}
+              id="logout-btn"
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all cursor-pointer"
+              title="Logout from portal"
             >
-              <User className="w-3.5 h-3.5" />
-              Customer
-            </button>
-            <button 
-              id="switch-retailer"
-              onClick={() => handleRoleChange('retailer')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                activeRole === 'retailer' 
-                  ? 'bg-amber-600 text-white shadow-md' 
-                  : 'text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              Retailer
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
 
@@ -939,16 +1043,7 @@ export default function App() {
               </div>
             )}
 
-            {/* Profile Tag */}
-            <div className="hidden lg:flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-1.5">
-              <div className="w-7.5 h-7.5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs uppercase">
-                {activeRole === 'retailer' ? 'MP' : (currentCustomer ? currentCustomer.name.substring(0, 2) : 'AD')}
-              </div>
-              <div className="text-left">
-                <p className="text-xs font-extrabold text-slate-700">{activeRole === 'retailer' ? 'Mr. Papan' : (currentCustomer ? currentCustomer.name : 'Amrit Guest')}</p>
-                <p className="text-[10px] text-slate-400 capitalize">{activeRole}</p>
-              </div>
-            </div>
+
 
           </div>
         </div>
@@ -1005,10 +1100,18 @@ export default function App() {
             <p className="text-slate-500 font-semibold">Updating Amrit Dhara terminal state...</p>
           </div>
         ) : (
-          <>
+          <AnimatePresence mode="wait">
             {/* 1. LANDING/HOME VIEW */}
             {activeTab === 'home' && activeRole === 'customer' && (
-              <div id="landing-view" className="space-y-20">
+              <motion.div
+                key="home"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="landing-view"
+                className="space-y-20"
+              >
                 
                 {/* Premium Sleek Hero Section */}
                 <section className="relative bg-slate-950 text-white rounded-[32px] overflow-hidden p-8 md:p-20 border border-slate-900 shadow-2xl">
@@ -1199,12 +1302,20 @@ export default function App() {
                   </div>
                 </section>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 2. CUSTOMER / RETAILER WORKSPACE */}
             {(activeRole === 'customer' || activeRole === 'retailer') && activeTab === 'dashboard' && (
-              <div id="customer-dashboard" className="space-y-8 animate-fade-in text-left">
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="customer-dashboard"
+                className="space-y-8 text-left"
+              >
                 
                 {/* =========================================================================
                     A. RETAILER ENTERPRISE DASHBOARD
@@ -1929,12 +2040,20 @@ export default function App() {
                   </div>
                 )}
 
-              </div>
+              </motion.div>
             )}
 
             {/* 3. PRODUCT CATALOG SHOPPING PAGE */}
             {(activeRole === 'customer' || activeRole === 'retailer') && activeTab === 'products' && (
-              <div id="product-catalog-view" className="space-y-8">
+              <motion.div
+                key="products"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="product-catalog-view"
+                className="space-y-8"
+              >
                 
                 {/* Search / filter control */}
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-slate-200/60 shadow-xs">
@@ -2040,12 +2159,20 @@ export default function App() {
                   })}
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 4. SUBSCRIPTION MANAGEMENT PORTAL */}
             {(activeRole === 'customer' || activeRole === 'retailer') && activeTab === 'subscriptions' && (
-              <div id="subscriptions-portal-view" className="space-y-8">
+              <motion.div
+                key="subscriptions"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="subscriptions-portal-view"
+                className="space-y-8"
+              >
                 
                 {/* Headings */}
                 <div className="bg-gradient-to-r from-indigo-900 to-blue-900 text-white rounded-3xl p-6 md:p-8 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -2141,12 +2268,20 @@ export default function App() {
                   )}
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 5. AI INSIGHTS TAB */}
             {(activeRole === 'customer' || activeRole === 'retailer') && activeTab === 'insights' && (
-              <div id="ai-insights-view" className="space-y-8">
+              <motion.div
+                key="insights"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="ai-insights-view"
+                className="space-y-8"
+              >
                 
                 {/* Header banner */}
                 <div className="bg-gradient-to-r from-violet-900 via-indigo-950 to-purple-900 text-white rounded-3xl p-6 md:p-8 shadow-xl relative overflow-hidden">
@@ -2225,12 +2360,20 @@ export default function App() {
                   </div>
                 )}
 
-              </div>
+              </motion.div>
             )}
 
             {/* 6. RETAILER: ANALYTICS & REVENUE COMMAND CENTER */}
             {activeRole === 'retailer' && activeTab === 'dashboard' && analytics && (
-              <div id="admin-analytics-view" className="space-y-8">
+              <motion.div
+                key="retailer-analytics"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="admin-analytics-view"
+                className="space-y-8"
+              >
                 
                 {/* Statistics panel */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2342,12 +2485,20 @@ export default function App() {
                   </div>
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 7. RETAILER: ORDERS DISPATCH BOARD */}
             {activeRole === 'retailer' && activeTab === 'orders' && (
-              <div id="admin-orders-board" className="space-y-6">
+              <motion.div
+                key="retailer-orders"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="admin-orders-board"
+                className="space-y-6"
+              >
                 
                 <div className="flex items-center justify-between">
                   <div>
@@ -2356,15 +2507,108 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Mobile & Tablet-optimized Stage Switcher (Hidden on Large screens) */}
+                <div className="block lg:hidden space-y-4">
+                  {/* Stage switching pill tabs */}
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none snap-x snap-mandatory">
+                    {['Pending', 'Confirmed', 'Preparing', 'Out For Delivery', 'Delivered'].map(stage => {
+                      const count = orders.filter(o => o.status === stage).length;
+                      const isActive = selectedDispatchStage === stage;
+                      return (
+                        <button
+                          key={stage}
+                          onClick={() => setSelectedDispatchStage(stage)}
+                          className={`snap-center flex-shrink-0 px-4 py-2.5 rounded-2xl text-xs font-black flex items-center gap-2 transition-all ${
+                            isActive 
+                              ? 'bg-amber-600 text-white shadow-md shadow-amber-600/10 scale-102' 
+                              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span>{stage}</span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-black ${
+                            isActive ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Active stage details & order cards stack */}
+                  <div className="space-y-4">
+                    {orders.filter(o => o.status === selectedDispatchStage).length === 0 ? (
+                      <div className="py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-6 space-y-2">
+                        <p className="text-xs text-slate-400 font-bold">No dispatch orders are currently {selectedDispatchStage.toLowerCase()}.</p>
+                        <p className="text-[10px] text-slate-400">All caught up here!</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {orders.filter(o => o.status === selectedDispatchStage).map(o => (
+                          <div key={o.id} className="bg-white rounded-2xl p-4 border border-slate-200/50 shadow-xs space-y-3 text-left">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="text-xs font-black text-slate-800">Order #{o.id}</p>
+                                <p className="text-[10px] text-slate-400">{new Date(o.createdAt).toLocaleTimeString()}</p>
+                              </div>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                o.paymentStatus === 'Paid' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                              }`}>
+                                ₹{o.total}
+                              </span>
+                            </div>
+
+                            <p className="text-xs font-semibold text-slate-600">Client: <strong>{o.customerName}</strong></p>
+                            
+                            <div className="text-[11px] text-slate-500 leading-normal border-t border-slate-100 pt-2">
+                              {o.products.map((item, idx) => (
+                                <div key={idx} className="flex justify-between">
+                                  <span>{item.name} x{item.quantity}</span>
+                                  <span className="font-bold">₹{item.price * item.quantity}</span>
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="text-[10px] text-slate-400 bg-slate-50 p-2 rounded-lg truncate">
+                              📍 {o.address}
+                            </div>
+
+                            {o.transactionRef && (
+                              <div className="text-[10px] text-blue-700 bg-blue-50/50 border border-blue-100 p-2 rounded-lg font-mono flex items-center justify-between">
+                                <span className="truncate mr-1">💳 UTR: <strong>{o.transactionRef}</strong></span>
+                                <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-sans font-bold uppercase shrink-0">Verify Live</span>
+                              </div>
+                            )}
+
+                            {/* Progress buttons */}
+                            <div className="flex gap-2 pt-2 border-t border-slate-100">
+                              {selectedDispatchStage === 'Pending' && (
+                                <button onClick={() => handleUpdateOrderStatus(o.id, 'Confirmed')} className="w-full bg-blue-600 text-white text-[10px] font-bold py-2 rounded-lg">Confirm Order</button>
+                              )}
+                              {selectedDispatchStage === 'Confirmed' && (
+                                <button onClick={() => handleUpdateOrderStatus(o.id, 'Preparing')} className="w-full bg-amber-600 text-white text-[10px] font-bold py-2 rounded-lg">Load Stock Can</button>
+                              )}
+                              {selectedDispatchStage === 'Preparing' && (
+                                <button onClick={() => handleUpdateOrderStatus(o.id, 'Out For Delivery')} className="w-full bg-indigo-600 text-white text-[10px] font-bold py-2 rounded-lg">Dispatch Rider</button>
+                              )}
+                              {selectedDispatchStage === 'Out For Delivery' && (
+                                <button onClick={() => handleUpdateOrderStatus(o.id, 'Delivered')} className="w-full bg-emerald-600 text-white text-[10px] font-bold py-2 rounded-lg">Complete Delivery</button>
+                              )}
+                              {selectedDispatchStage === 'Delivered' && (
+                                <span className="text-[10px] text-emerald-600 font-extrabold flex items-center justify-center gap-1 w-full"><CheckCircle className="w-4 h-4" /> Completed</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Desktop Multi-column Layout (Visible only on Large screens) */}
+                <div className="hidden lg:grid lg:grid-cols-3 xl:grid-cols-5 gap-6">
                   {['Pending', 'Confirmed', 'Preparing', 'Out For Delivery', 'Delivered'].map(stage => {
-                    const stageOrders = orders.filter(o => {
-                      if (stage === 'Pending') return o.status === 'Pending';
-                      if (stage === 'Confirmed') return o.status === 'Confirmed';
-                      if (stage === 'Preparing') return o.status === 'Preparing';
-                      if (stage === 'Out For Delivery') return o.status === 'Out For Delivery';
-                      return o.status === 'Delivered';
-                    });
+                    const stageOrders = orders.filter(o => o.status === stage);
 
                     return (
                       <div key={stage} className="bg-slate-100 rounded-3xl p-4 space-y-3 min-h-[400px]">
@@ -2405,8 +2649,8 @@ export default function App() {
 
                               {o.transactionRef && (
                                 <div className="text-[10px] text-blue-700 bg-blue-50/50 border border-blue-100 p-2 rounded-lg font-mono flex items-center justify-between">
-                                  <span>💳 UTR Ref: <strong>{o.transactionRef}</strong></span>
-                                  <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-sans font-bold uppercase">Verify Live</span>
+                                  <span className="truncate mr-1">💳 UTR Ref: <strong>{o.transactionRef}</strong></span>
+                                  <span className="text-[9px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-sans font-bold uppercase shrink-0">Verify Live</span>
                                 </div>
                               )}
 
@@ -2436,12 +2680,20 @@ export default function App() {
                   })}
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 8. RETAILER: CATALOG EDIT MODE */}
             {activeRole === 'retailer' && activeTab === 'inventory' && (
-              <div id="admin-catalog-manager" className="space-y-8">
+              <motion.div
+                key="retailer-inventory"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="admin-catalog-manager"
+                className="space-y-8"
+              >
                 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                   
@@ -2633,12 +2885,20 @@ export default function App() {
 
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {/* 9. RETAILER: CUSTOMER LEDGER & DEBT COLLECTOR */}
             {activeRole === 'retailer' && (activeTab === 'customers' || activeTab === 'payments') && (
-              <div id="admin-debt-ledger" className="space-y-6">
+              <motion.div
+                key="retailer-ledger"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                transition={{ duration: 0.3, ease: 'easeInOut' }}
+                id="admin-debt-ledger"
+                className="space-y-6"
+              >
                 
                 {activeTab === 'customers' && (
                   <>
@@ -2759,10 +3019,10 @@ export default function App() {
                   </div>
                 </div>
               )}
-            </div>
+            </motion.div>
           )}
 
-          </>
+          </AnimatePresence>
         )}
 
       </main>

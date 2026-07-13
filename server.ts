@@ -239,8 +239,16 @@ const initialData = {
 
 // JSON Database Helper
 function readDB() {
+  const getSeedUsers = () => [
+    { id: 'user-papan', email: 'papan@amritdhara.com', name: 'Mr. Papan', password: 'password123', role: 'retailer' },
+    { id: 'user-retailer', email: 'retailer@amritdhara.com', name: 'Retailer Admin', password: 'password123', role: 'retailer' },
+    { id: 'user-kausik', email: 'kausik1027@gmail.com', name: 'SK Kausik', password: 'password123', role: 'customer', customerId: 'cust-1' },
+    { id: 'user-subham', email: 'subham.bhoj@gmail.com', name: 'Subham Gupta (Bhojanalaya)', password: 'password123', role: 'customer', customerId: 'cust-2' },
+    { id: 'user-priyanka', email: 'priyanka.sharma@outlook.com', name: 'Priyanka Sharma', password: 'password123', role: 'customer', customerId: 'cust-3' },
+  ];
+
   if (!fs.existsSync(DATA_FILE)) {
-    const defaultDb = { ...initialData, settings: { lowStockThreshold: 20 } };
+    const defaultDb = { ...initialData, settings: { lowStockThreshold: 20 }, users: getSeedUsers() };
     fs.writeFileSync(DATA_FILE, JSON.stringify(defaultDb, null, 2));
     return defaultDb;
   }
@@ -250,10 +258,14 @@ function readDB() {
     if (!parsed.settings) {
       parsed.settings = { lowStockThreshold: 20 };
     }
+    if (!parsed.users) {
+      parsed.users = getSeedUsers();
+      fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2));
+    }
     return parsed;
   } catch (err) {
     console.error('Error reading DB, resetting to defaults', err);
-    return { ...initialData, settings: { lowStockThreshold: 20 } };
+    return { ...initialData, settings: { lowStockThreshold: 20 }, users: getSeedUsers() };
   }
 }
 
@@ -300,6 +312,102 @@ function checkProductStockAndNotify(db: any, product: any) {
 
 const app = express();
 app.use(express.json());
+
+// Authentication Routes
+const AUTHORIZED_RETAILERS = ['papan@amritdhara.com', 'retailer@amritdhara.com', 'admin@amritdhara.com'];
+
+app.post('/api/auth/register', (req, res) => {
+  const db = readDB();
+  const { name, email, password, phone, address } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Name, email, and password are required' });
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  const existingUser = db.users.find((u: any) => u.email.toLowerCase().trim() === emailLower);
+  if (existingUser) {
+    return res.status(400).json({ message: 'An account with this email already exists' });
+  }
+
+  const isRetailer = AUTHORIZED_RETAILERS.includes(emailLower);
+  const role = isRetailer ? 'retailer' : 'customer';
+
+  let customerId = undefined;
+  if (role === 'customer') {
+    // Check if there is an existing customer record matching this email
+    const existingCustomer = db.customers.find((c: any) => c.email.toLowerCase().trim() === emailLower);
+    if (existingCustomer) {
+      customerId = existingCustomer.id;
+    } else {
+      // Create new customer record
+      const newCustId = `cust-${Date.now()}`;
+      const newCustomer = {
+        id: newCustId,
+        name,
+        email: emailLower,
+        phone: phone || '',
+        role: 'customer',
+        address: address || '',
+        outstandingBalance: 0,
+        monthlySpending: 0,
+        totalPurchases: 0
+      };
+      db.customers.push(newCustomer);
+      customerId = newCustId;
+    }
+  }
+
+  const newUser = {
+    id: `user-${Date.now()}`,
+    name,
+    email: emailLower,
+    password,
+    role,
+    customerId
+  };
+
+  db.users.push(newUser);
+  writeDB(db);
+
+  res.json({
+    success: true,
+    user: {
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      customerId: newUser.customerId
+    }
+  });
+});
+
+app.post('/api/auth/login', (req, res) => {
+  const db = readDB();
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
+
+  const emailLower = email.toLowerCase().trim();
+  const user = db.users.find((u: any) => u.email.toLowerCase().trim() === emailLower && u.password === password);
+
+  if (!user) {
+    return res.status(400).json({ message: 'Invalid email or password' });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      customerId: user.customerId
+    }
+  });
+});
 
 // API ENDPOINTS
 
