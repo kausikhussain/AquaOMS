@@ -1,0 +1,6 @@
+{
+  "name": "Amrit Dhara",
+  "description": "Direct-from-plant 20L purified drinking water delivery, bulk orders, and automated stock alerting system for Atalapur, Jajpur, Odisha - 755009.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
